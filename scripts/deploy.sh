@@ -7,7 +7,7 @@ RUNTIME="nodejs12.x"
 ROLE="arn:aws:iam::288504654618:role/Guillotine_Lambda_Execution_Role"
 ENVIRONMENT_VARIABLES='{CONNECTION_TABLE=WS-Connections}'
 HANDLER="guillotine-handler"
-FUNCTIONS=("connectionManager" "defaultMessage" "getAllNobleCards")
+FUNCTIONS=("guillotine-game")
 
 
 # Check if an argument of the function name been set as argument
@@ -47,7 +47,7 @@ function deploy_lambda() {
   'create')
     aws lambda create-function --function-name ${FUNCTION_NAME} \
     --runtime ${RUNTIME} --role ${ROLE} \
-    --handler ${HANDLER}.${FUNCTION_NAME} \
+    --handler ${FUNCTION_NAME}.handler \
     --zip-file fileb://${ZIPFILE} \
     --environment Variables=${ENVIRONMENT_VARIABLES}
     

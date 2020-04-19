@@ -74,10 +74,10 @@ async function getAllActionCardsIds() {
 async function createGame() {
     var nobleCards = await getAllNobleCardsIds();
     var actionCards = await getAllActionCardsIds();
-    
+
     guillotineUtils.shuffleArr(nobleCards);
     guillotineUtils.shuffleArr(actionCards);
-    
+
     var params = {
         TableName: tables.games,
         Item: {
@@ -85,20 +85,95 @@ async function createGame() {
             'CreatedAt': { S: (new Date()).toISOString() },
             'GameDay': { N: '1' },
             'NoblesCardsDeck': { SS: nobleCards },
-            'ActionsCardsDeck': { SS: actionCards }
+            'ActionsCardsDeck': { SS: actionCards },
+            'GameState': { S: 'Created' }
         }
     };
 
     var promise = new Promise(async function(resolve, reject) {
-        ddb.putItem(params, await function(err, data) {
-            if (err) {
-                console.log("Error", err);
-                reject(Error(err));
-            }
-            else {
-                resolve(params.Item);
-            }
-        });
+        ddb.putItem(params, await
+            function(err, data) {
+                if (err) {
+                    console.log("Error", err);
+                    reject(Error(err));
+                }
+                else {
+                    resolve({
+                        gameId: params.Item.GameId.S,
+                        createdAt: params.Item.CreatedAt.S,
+                        state: params.Item.GameState.S
+                    });
+                }
+            });
+    });
+
+    return promise;
+}
+
+// Change the game state
+async function changeGameState(gameId, gameState) {
+    var params = {
+        TableName: tables.games,
+        Key: {
+            "GameId": gameId
+        },
+        UpdateExpression: "set GameState = :s",
+        ConditionExpression: "GameId = :gid",
+        ExpressionAttributeValues: {
+            ":s": gameState,
+            ":gid": gameId
+        },
+        ReturnValues: "UPDATED_NEW"
+    };
+
+    var promise = new Promise(async function(resolve, reject) {
+        dynamoClient.update(params, await
+            function(err, data) {
+                if (err) {
+                    if(err.code == 'ConditionalCheckFailedException'){
+                        // game dows not exists
+                        resolve({
+                            err: 'Game ' + gameId + ' does not exists'
+                        })
+                    }
+                    console.log("Error", err);
+                    reject(Error(err));
+                }
+                else {
+                    resolve({
+                        gameId: gameId,
+                        state: gameState
+                    });
+                }
+            });
+    });
+
+    return promise;
+}
+
+// Delete an item from the Games table
+async function deleteGame(gameId) {
+    const params = {
+        TableName: tables.games,
+        Key: {
+            GameId: { S: gameId }
+        }
+    };
+
+    var promise = new Promise(async function(resolve, reject) {
+        ddb.deleteItem(params, await
+            function(err, data) {
+                if (err) {
+                    console.log("Error", err);
+                    reject(Error(err));
+                }
+                else {
+                    resolve({
+                        gameId: gameId,
+                        state: 'deleted'
+                    });
+                }
+            });
     });
 
     return promise;
@@ -108,3 +183,5 @@ async function createGame() {
 exports.get_all_noble_cards = get_all_noble_cards;
 exports.get_all_action_cards = get_all_action_cards;
 exports.createGame = createGame;
+exports.changeGameState = changeGameState;
+exports.deleteGame = deleteGame;

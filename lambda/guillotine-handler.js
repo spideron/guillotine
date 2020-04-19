@@ -12,8 +12,7 @@ module.exports.defaultMessage = connectionManager.defaultMessage;
 
 module.exports.getAllNobleCards = async (event, context, callback) => {
     const cards = await db_utils.get_all_noble_cards();
-    console.log(cards);
-    
+
     return await connectionManager.sendMessage(
       cards,
       event.requestContext.domainName,
