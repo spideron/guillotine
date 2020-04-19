@@ -1,0 +1,9 @@
+{
+  "name": "guillotine",
+  "version": "1.0.0",
+  "dependencies": {
+    "bluebird": "latest",
+    "uuid": "latest",
+    "node-fetch": "2.6.0"
+  }
+}
