@@ -7,7 +7,7 @@ RUNTIME="nodejs12.x"
 ROLE="arn:aws:iam::288504654618:role/Guillotine_Lambda_Execution_Role"
 ENVIRONMENT_VARIABLES='{CONNECTION_TABLE=WS-Connections}'
 HANDLER="guillotine-handler"
-FUNCTIONS=("guillotine-game")
+FUNCTIONS=("guillotine-game" "guillotine-player")
 
 
 # Check if an argument of the function name been set as argument

@@ -4,8 +4,10 @@ const ddb = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 const tables = {
     nobles: 'NobleCards',
     actions: 'ActionCards',
-    games: 'Games'
-}
+    games: 'Games',
+    players: 'Players'
+};
+
 const guillotineUtils = require('./guillotine_utils.js');
 var nobleCards, actionCards, nobleCardsIds, actionCardsIds;
 
@@ -30,6 +32,36 @@ function scan_table(tableName) {
                 resolve({ cards: data.Items });
             }
         });
+    });
+
+    return promise;
+}
+
+function getItemById(tableName, keyField, id) {
+    var params = {
+        TableName: tableName,
+        Key: {}
+    };
+
+    params.Key[keyField] = id;
+
+    var promise = new Promise(async function(resolve, reject) {
+        dynamoClient.get(params, await
+            function(err, data) {
+                if (err) {
+                    console.log("Error", err);
+                    reject(Error(err));
+                }
+                else {
+                    if (!Object.keys(data).length) {
+                        // no result returned
+                        resolve({ err: 'No data found for ' + keyField + '=' + id });
+                    }
+                    else {
+                        resolve(data.Item);
+                    }
+                }
+            });
     });
 
     return promise;
@@ -69,6 +101,12 @@ async function getAllActionCardsIds() {
     return actionCardsIds;
 }
 
+
+async function getGame(gameId) {
+    var game = await getItemById(tables.games, "GameId", gameId);
+
+    return game;
+}
 
 // Crate a new item in the Games table
 async function createGame() {
@@ -130,11 +168,11 @@ async function changeGameState(gameId, gameState) {
         dynamoClient.update(params, await
             function(err, data) {
                 if (err) {
-                    if(err.code == 'ConditionalCheckFailedException'){
+                    if (err.code == 'ConditionalCheckFailedException') {
                         // game dows not exists
                         resolve({
                             err: 'Game ' + gameId + ' does not exists'
-                        })
+                        });
                     }
                     console.log("Error", err);
                     reject(Error(err));
@@ -179,9 +217,174 @@ async function deleteGame(gameId) {
     return promise;
 }
 
+async function createPlayer(name) {
+    var params = {
+        TableName: tables.players,
+        Item: {
+            'PlayerId': { S: guillotineUtils.generateId() },
+            'CreatedAt': { S: (new Date()).toISOString() },
+            'PlayerName': { S: name }
+        }
+    };
+
+    var promise = new Promise(async function(resolve, reject) {
+        ddb.putItem(params, await
+            function(err, data) {
+                if (err) {
+                    console.log("Error", err);
+                    reject(Error(err));
+                }
+                else {
+                    resolve({
+                        playerId: params.Item.PlayerId.S,
+                        createdAt: params.Item.CreatedAt.S
+                    });
+                }
+            });
+    });
+
+    return promise;
+}
+
+async function getPlayer(playerId){
+    var player = await getItemById(tables.players, "PlayerId", playerId);
+
+    return player;
+}
+
+function isPlayerInGame(game, playerId) {
+    return game && game.Players && game.Players.indexOf(playerId) > -1;
+}
+
+async function updateGamePlayers(gameId, players){
+    const params = {
+        TableName: tables.games,
+        Key: {
+            "GameId": gameId
+        },
+        UpdateExpression: "set Players = :p",
+        ConditionExpression: "GameId = :gid",
+        ExpressionAttributeValues: {
+            ":p": players,
+            ":gid": gameId
+        },
+        ReturnValues: "UPDATED_NEW"
+    };
+
+    var promise = new Promise(async function(resolve, reject) {
+        dynamoClient.update(params, await
+            function(err, data) {
+                if (err) {
+                    if (err.code == 'ConditionalCheckFailedException') {
+                        // game dows not exists
+                        resolve({
+                            err: 'Game ' + gameId + ' does not exists'
+                        });
+                    }
+                    console.log("Error", err);
+                    reject(Error(err));
+                }
+                else {
+                    resolve({
+                        gameId: gameId,
+                        players: players
+                    });
+                }
+            });
+    });
+
+    return promise;
+}
+
+async function playerJoinGame(playerId, gameId) {
+    const game = await getGame(gameId);
+    const player = await getPlayer(playerId);
+
+    if (game.err) {
+        return game;
+    }
+    
+    if(player.err){
+        return player;
+    }
+
+    if (game.GameState != 'Created') {
+        return {
+            err: 'cannot add player ' + playerId + ' to game ' + gameId +
+                '. The game state is ' + game.GameState
+        };
+    }
+
+    if (isPlayerInGame(game, playerId)) {
+        return { err: 'player ' + playerId + ' has already joined game ' + gameId };
+    }
+
+    let players = game.Players || [];
+    players.push(playerId);
+
+    return updateGamePlayers(gameId, players);
+}
+
+
+async function playerLeaveGame(playerId, gameId) {
+    const game = await getGame(gameId);
+    const player = await getPlayer(playerId);
+
+    if (game.err) {
+        return game;
+    }
+    
+    if(player.err){
+        return player;
+    }
+    
+    if(!isPlayerInGame(game, playerId)){
+        return {gameId: gameId, players: game.Players};
+    }
+    
+    let players = game.Players;
+    players.splice(game.Players.indexOf(playerId), 1);
+    
+    return updateGamePlayers(gameId, players);
+}
+
+async function playerDelete(playerId){
+    const params = {
+        TableName: tables.players,
+        Key: {
+            PlayerId: { S: playerId }
+        }
+    };
+
+    var promise = new Promise(async function(resolve, reject) {
+        ddb.deleteItem(params, await
+            function(err, data) {
+                if (err) {
+                    console.log("Error", err);
+                    reject(Error(err));
+                }
+                else {
+                    resolve({
+                        playerId: playerId,
+                        state: 'deleted'
+                    });
+                }
+            });
+    });
+
+    return promise;
+}
 
 exports.get_all_noble_cards = get_all_noble_cards;
 exports.get_all_action_cards = get_all_action_cards;
+
+exports.getGame = getGame;
 exports.createGame = createGame;
 exports.changeGameState = changeGameState;
 exports.deleteGame = deleteGame;
+
+exports.getPlayer = getPlayer;
+exports.createPlayer = createPlayer;
+exports.playerJoinGame = playerJoinGame;
+exports.playerLeaveGame = playerLeaveGame;
+exports.playerDelete = playerDelete;

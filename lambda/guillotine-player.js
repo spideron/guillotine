@@ -15,19 +15,19 @@ module.exports.handler = async(event, context, callback) => {
     let respone;
     switch (body.action) {
         case 'get':
-            respone = await db_utils.getGame(body.gameId);
+            respone = await db_utils.getPlayer(body.playerId);
             break;
         case 'create':
-            respone = await db_utils.createGame();
+            respone = await db_utils.createPlayer(body.name);
             break;
-        case 'start':
-            respone = await db_utils.changeGameState(body.gameId, 'started');
+        case 'join':
+            respone = await db_utils.playerJoinGame(body.playerId, body.gameId);
             break;
-        case 'end':
-            respone = await db_utils.changeGameState(body.gameId, 'ended');
+        case 'leave':
+            respone = await db_utils.playerLeaveGame(body.playerId, body.gameId);
             break;
         case 'delete':
-            respone = await db_utils.deleteGame(body.gameId);
+            respone = await db_utils.playerDelete(body.playerId);
             break;
         default:
             result = 'failure';
